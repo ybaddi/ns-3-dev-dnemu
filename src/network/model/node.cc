@@ -101,6 +101,11 @@ Node::GetSystemId (void) const
 {
   return m_sid;
 }
+void 
+Node::SetSystemId (uint32_t sid) 
+{
+  m_sid = sid;
+}
 
 uint32_t
 Node::AddDevice (Ptr<NetDevice> device)

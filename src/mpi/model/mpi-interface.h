@@ -27,6 +27,7 @@
 
 #include "ns3/nstime.h"
 #include "ns3/buffer.h"
+#include "ns3/system-thread.h"
 
 #if defined(NS3_OPENMPI)
 struct ompi_request_t;
@@ -144,7 +145,18 @@ public:
    */
   static uint32_t GetTxCount ();
 
+  static bool IsInSameNode (int rank);
+  static struct sockaddr_in *GetSockAddress (int rank);
+
+  // Socket for distributed emulation
+  static int GetDistSocket ();
+
+  static void ReceiveSocketMessages ();
+
 private:
+  static void init_distributed_emu ();
+  static int gather_host_array ();
+
   static uint32_t m_sid;
   static uint32_t m_size;
 
@@ -164,6 +176,10 @@ private:
 
   // List of pending non-blocking sends
   static std::list<SentBuffer> m_pendingTx;
+
+  // Socket for distributed emulation
+  static int m_distsock;
+  static Ptr<SystemThread>     m_readThread;
 };
 
 } // namespace ns3

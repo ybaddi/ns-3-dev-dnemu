@@ -63,6 +63,14 @@ typedef struct timeval TIMER_TYPE;
 
 NS_LOG_COMPONENT_DEFINE ("CampusNetworkModelDistributed");
 
+static void
+DropSinkWithContext (Ptr<OutputStreamWrapper> stream, std::string context, Ptr<const Packet> p)
+{
+  NS_LOG_FUNCTION (stream << p);
+  *stream->GetStream () << "d " << Simulator::Now ().GetSeconds () << " " << context << " " << *p << std::endl;
+  std::cout << "d " << Simulator::Now ().GetSeconds () << " " << context << " " << *p << std::endl;
+}
+
 int
 main (int argc, char *argv[])
 {
@@ -92,6 +100,10 @@ main (int argc, char *argv[])
   cmd.AddValue ("nBytes", "Number of bytes for each on/off app", nBytes);
   cmd.AddValue ("nix", "Toggle the use of nix-vector or global routing", nix);
   cmd.Parse (argc,argv);
+
+  LogComponentEnable ("PacketSink", LOG_LEVEL_INFO);
+  //LogComponentEnable ("PointToPointRemoteTunnelChannel", LogLevel (LOG_LEVEL_ALL|LOG_PREFIX_TIME|LOG_PREFIX_NODE));
+  //  LogComponentEnable ("PointToPointRemoteChannel", LogLevel (LOG_LEVEL_ALL|LOG_PREFIX_TIME|LOG_PREFIX_NODE));
 
   if (nCN < 2)
     {
@@ -589,6 +601,24 @@ main (int argc, char *argv[])
       Ipv4GlobalRoutingHelper::PopulateRoutingTables ();
     }
 
+   // p2p_2gb200ms.EnablePcapAll ("pcap/nms-p2p");
+   // p2p_1gb5ms.EnablePcapAll ("pcap/nms-p2p");
+   // p2p_100mb1ms.EnablePcapAll ("pcap/nms-p2p");
+
+  AsciiTraceHelper ascii;
+  Ptr<OutputStreamWrapper> stream = ascii.CreateFileStream ("p2pdrop.tr");
+  oss.str ("");  
+  oss << "/NodeList/*/DeviceList/*/$ns3::PointToPointNetDevice/PhyRxDrop";
+  Config::Connect (oss.str (), MakeBoundCallback (&DropSinkWithContext, stream));
+
+  oss.str ("");  
+  oss << "/NodeList/*/DeviceList/*/$ns3::PointToPointNetDevice/TxQueue/Drop";
+  Config::Connect (oss.str (), MakeBoundCallback (&DropSinkWithContext, stream));
+
+  // p2p_2gb200ms.EnableAsciiAll ("pcap/p2p_2gb200ms.tr");
+  // p2p_1gb5ms.EnableAsciiAll ("pcap/p2p_1gb5ms.tr");
+  // p2p_100mb1ms.EnableAsciiAll ("pcap/p2p_100mb1ms.tr");
+
   TIMER_TYPE routingEnd;
   TIMER_NOW (routingEnd);
   cout << "Routing tables population took "
@@ -596,7 +626,7 @@ main (int argc, char *argv[])
 
   cout << "Running simulator..." << endl;
   TIMER_NOW (t1);
-  Simulator::Stop (Seconds (100.0));
+  Simulator::Stop (Seconds (150.0));
   Simulator::Run ();
   TIMER_NOW (t2);
   cout << "Simulator finished." << endl;

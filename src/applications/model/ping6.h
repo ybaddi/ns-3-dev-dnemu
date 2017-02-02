@@ -25,6 +25,7 @@
 #include "ns3/event-id.h"
 #include "ns3/ptr.h"
 #include "ns3/ipv6-address.h"
+#include <map>
 
 namespace ns3
 {
@@ -180,6 +181,10 @@ private:
    * \brief Routers addresses for routing type 0.
    */
   std::vector<Ipv6Address> m_routers;
+
+  std::map<uint16_t, Time> m_sentq;
+  Time m_started;
+
 };
 
 } /* namespace ns3 */

@@ -191,6 +191,8 @@ void Ping6::Send ()
   req.SetId (0xBEEF);
   req.SetSeq (m_seq);
   m_seq++;
+  m_sentq.insert (std::make_pair (m_seq - 1, Simulator::Now()));
+
 
   /* we do not calculate pseudo header checksum here, because we are not sure about 
    * source IPv6 address. Checksum is calculated in Ipv6RawSocketImpl.
@@ -247,10 +249,24 @@ void Ping6::HandleRead (Ptr<Socket> socket)
           switch (type)
             {
             case Icmpv6Header::ICMPV6_ECHO_REPLY:
+		{
               packet->RemoveHeader (reply);
+                std::map<uint16_t, Time>::iterator i = m_sentq.find (reply.GetSeq ());
+                Time sendTime = i->second;
+                NS_ASSERT (Simulator::Now () >= sendTime);
+                Time delta = Simulator::Now () - sendTime;
+                m_sentq.erase (i);
+                //m_avgRtt.Update (delta.GetMilliSeconds());
+
+                std::cout << std::dec << packet->GetSize () << " bytes from " << hdr.GetSourceAddress() << ":"
+                          << " icmp_seq=" << reply.GetSeq ()
+                          << " ttl=" << (unsigned)hdr.GetHopLimit ()
+                          << " time=" << delta.GetMilliSeconds() << " ms" << std::endl;
+
 
               NS_LOG_INFO ("Received Echo Reply size  = " << std::dec << packet->GetSize () << " bytes from " << address.GetIpv6 () << " id =  " << (uint16_t)reply.GetId () << " seq = " << (uint16_t)reply.GetSeq ());
               break;
+		}
             default:
               /* other type, discard */
               break;

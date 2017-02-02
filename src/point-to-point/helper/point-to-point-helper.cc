@@ -24,12 +24,16 @@
 #include "ns3/point-to-point-net-device.h"
 #include "ns3/point-to-point-channel.h"
 #include "ns3/point-to-point-remote-channel.h"
+#include "ns3/point-to-point-remote-tunnel-channel.h"
 #include "ns3/queue.h"
 #include "ns3/config.h"
 #include "ns3/packet.h"
 #include "ns3/names.h"
+#ifdef NS3_MPI
 #include "ns3/mpi-interface.h"
 #include "ns3/mpi-receiver.h"
+#endif
+#include "ns3/realtime-simulator-impl.h"
 
 #include "ns3/trace-helper.h"
 #include "point-to-point-helper.h"
@@ -240,6 +244,8 @@ PointToPointHelper::Install (Ptr<Node> a, Ptr<Node> b)
   // (rank), and the rank is the same as this instance.  If both are true, 
   //use a normal p2p channel, otherwise use a remote channel
   bool useNormalChannel = true;
+  bool useRemoteTunnelChannel = false;
+  int oppo_sysid;
   Ptr<PointToPointChannel> channel = 0;
   if (MpiInterface::IsEnabled ())
     {
@@ -250,20 +256,58 @@ PointToPointHelper::Install (Ptr<Node> a, Ptr<Node> b)
         {
           useNormalChannel = false;
         }
+
+      // For Distributed Emulation (MPI && RealTime)
+      Ptr<RealtimeSimulatorImpl> impl = DynamicCast<RealtimeSimulatorImpl> (Simulator::GetImplementation ());
+      if (impl && GetPointer (impl))
+        {
+          oppo_sysid = (n1SystemId == currSystemId) ? n2SystemId : n1SystemId;
+          if (n1SystemId != n2SystemId)
+            {
+              NS_LOG_INFO (n1SystemId <<  " and " << n2SystemId << " are in different ranks");
+              useRemoteTunnelChannel = true;
+            }
+          else
+            {
+              useNormalChannel = true;
+            }
+        }
     }
+  //  NS_LOG_INFO ("currSystemId is " << MpiInterface::GetSystemId ());
   if (useNormalChannel)
     {
       channel = m_channelFactory.Create<PointToPointChannel> ();
     }
   else
     {
-      channel = m_remoteChannelFactory.Create<PointToPointRemoteChannel> ();
-      Ptr<MpiReceiver> mpiRecA = CreateObject<MpiReceiver> ();
-      Ptr<MpiReceiver> mpiRecB = CreateObject<MpiReceiver> ();
-      mpiRecA->SetReceiveCallback (MakeCallback (&PointToPointNetDevice::Receive, devA));
-      mpiRecB->SetReceiveCallback (MakeCallback (&PointToPointNetDevice::Receive, devB));
-      devA->AggregateObject (mpiRecA);
-      devB->AggregateObject (mpiRecB);
+      if (useRemoteTunnelChannel == true)
+        {
+          NS_LOG_INFO ("Using remote tunnel channel");
+          m_remoteChannelFactory.SetTypeId ("ns3::PointToPointRemoteTunnelChannel");
+          channel = m_remoteChannelFactory.Create<PointToPointRemoteTunnelChannel> ();
+          DynamicCast<PointToPointRemoteTunnelChannel>(channel)->SetDestination (oppo_sysid);
+
+          Ptr<MpiReceiver> mpiRecA = CreateObject<MpiReceiver> ();
+          Ptr<MpiReceiver> mpiRecB = CreateObject<MpiReceiver> ();
+          mpiRecA->SetReceiveCallback (MakeCallback (&PointToPointNetDevice::Receive, devA));
+          mpiRecB->SetReceiveCallback (MakeCallback (&PointToPointNetDevice::Receive, devB));
+          devA->AggregateObject (mpiRecA);
+          devB->AggregateObject (mpiRecB);
+
+          // Now it's ready
+          // FIXME
+          //          Simulator::Schedule (Seconds (1), &MpiInterface::ReceiveSocketMessages);
+        }
+      else
+        {
+          channel = m_remoteChannelFactory.Create<PointToPointRemoteChannel> ();
+          Ptr<MpiReceiver> mpiRecA = CreateObject<MpiReceiver> ();
+          Ptr<MpiReceiver> mpiRecB = CreateObject<MpiReceiver> ();
+          mpiRecA->SetReceiveCallback (MakeCallback (&PointToPointNetDevice::Receive, devA));
+          mpiRecB->SetReceiveCallback (MakeCallback (&PointToPointNetDevice::Receive, devB));
+          devA->AggregateObject (mpiRecA);
+          devB->AggregateObject (mpiRecB);
+        }
     }
 
   devA->Attach (channel);
